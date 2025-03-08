@@ -1,0 +1,6 @@
+# Environment files
+.env
+*/**.env
+client/.env
+smart-contract/.env
+smart-contracts/.env 
