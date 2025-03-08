@@ -326,7 +326,7 @@ export const contractABI = [
     }
   ];
 
-const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+const contractAddress = process.env.NEXT_PUBLIC_VOTING_CONTRACT_ADDRESS;
 export const getContract = async () => {
   if (typeof window.ethereum === "undefined") {
     throw new Error("Please install MetaMask!");

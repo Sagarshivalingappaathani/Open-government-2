@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getContract } from '@/lib/contract'; // Update this path
+import { getContract } from '@/lib/votingContract'; // Update this path
 
 // Add interface for Election type
 interface Election {

@@ -1,16 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getContract } from '@/lib/contract';
 import { toast } from 'react-hot-toast';
 
-export const useElection = (electionId: number) => {
+const useMetaMask = () => {
   const [currentAddress, setCurrentAddress] = useState<string | null>(null);
-  const [election, setElection] = useState<any>(null);
-  const [candidates, setCandidates] = useState<any[]>([]);
-  const [voters, setVoters] = useState<any[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [hasVoted, setHasVoted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   const getCurrentAddress = async () => {
     try {
@@ -20,81 +12,112 @@ export const useElection = (electionId: number) => {
       const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
       setCurrentAddress(accounts[0]);
       return accounts[0];
-    } catch (err) {
-      console.error('Error getting address:', err);
-      setError('Failed to connect to MetaMask.');
+    } catch (error) {
+      console.error('Error getting address:', error);
+      toast.error('Failed to connect to MetaMask. Please make sure it\'s installed and connected.');
+      return null;
     }
   };
 
+  return { currentAddress, getCurrentAddress };
+};
+
+const useElectionData = (getContract: Function, electionId: number) => {
+  const [election, setElection] = useState<any>(null);
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [voters, setVoters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   const loadElectionData = async () => {
     setLoading(true);
+    setError('');
+
     try {
       const contract = await getContract();
-      const address = await getCurrentAddress();
       const electionData = await contract.elections(electionId);
-
-      setElection({
-        name: electionData.name,
-        admin: electionData.admin,
-        isActive: electionData.isActive,
-        isCompleted: electionData.isCompleted,
-      });
+      setElection(electionData);
 
       const [ids, names, voteCounts] = await contract.getCandidates(electionId);
       setCandidates(ids.map((id: any, index: number) => ({
-        id: id.toNumber(),
+        id: Number(id),
         name: names[index],
-        votes: voteCounts[index].toNumber(),
+        votes: Number(voteCounts[index])
       })));
 
-      const voters = await contract.getVoters(electionId);
-      setVoters(voters);
-      setHasVoted(voters.some((voter: string) => voter.toLowerCase() === address.toLowerCase()));
-
-      setIsAdmin(address.toLowerCase() === electionData.admin.toLowerCase());
+      const votersList = await contract.getVoters(electionId);
+      setVoters(votersList);
     } catch (error) {
-      console.error('Error loading data:', error);
-      setError('Failed to load election data.');
+      console.error('Error loading election data:', error);
+      setError('Failed to load election data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    loadElectionData();
+  }, [electionId]);
+
+  return { election, candidates, voters, loading, error, loadElectionData };
+};
+
+const useElectionActions = (getContract: Function, electionId: number, loadElectionData: Function) => {
   const addCandidate = async (name: string) => {
-    if (!name.trim()) {
-      setError('Candidate name cannot be empty.');
-      return;
-    }
+    if (!name.trim()) return toast.error('Candidate name cannot be empty.');
 
     try {
       const contract = await getContract();
       const tx = await contract.addCandidate(electionId, name);
       await tx.wait();
       toast.success(`Candidate "${name}" added successfully!`);
-      loadElectionData(); // Refresh data
+      loadElectionData();
     } catch (error) {
       console.error('Error adding candidate:', error);
-      setError('Failed to add candidate.');
-      toast.error('Failed to add candidate.');
+      toast.error('Failed to add candidate. Make sure youre the admin.');
     }
   };
 
-  useEffect(() => {
-    if (electionId) {
+  const startElection = async () => {
+    try {
+      const contract = await getContract();
+      const tx = await contract.startElection(electionId);
+      await tx.wait();
+      toast.success('Election started successfully!');
       loadElectionData();
+    } catch (error) {
+      console.error('Failed to start election:', error);
+      toast.error('Failed to start election.');
     }
-  }, [electionId]);
-
-  return {
-    currentAddress,
-    election,
-    candidates,
-    voters,
-    isAdmin,
-    hasVoted,
-    loading,
-    error,
-    addCandidate,
-    loadElectionData,
   };
+
+  const stopElection = async () => {
+    try {
+      const contract = await getContract();
+      const tx = await contract.stopElection(electionId);
+      await tx.wait();
+      toast.success('Election stopped successfully!');
+      loadElectionData();
+    } catch (error) {
+      console.error('Failed to stop election:', error);
+      toast.error('Failed to stop election.');
+    }
+  };
+
+  const voteForCandidate = async (candidateId: number) => {
+    try {
+      const contract = await getContract();
+      const tx = await contract.vote(electionId, candidateId);
+      await tx.wait();
+      toast.success('Vote cast successfully!');
+      loadElectionData();
+    } catch (error) {
+      console.error('Error voting:', error);
+      toast.error('Failed to cast vote. Make sure the election is active and you havent already voted.');
+    }
+  };
+
+  return { addCandidate, startElection, stopElection, voteForCandidate };
 };
+
+export { useMetaMask, useElectionData, useElectionActions };

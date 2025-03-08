@@ -2,31 +2,33 @@ const hre = require("hardhat");
 
 async function main() {
   try {
-    // Get the network
     const { network } = hre;
-    
-    // Get the contract factory
+
+    // Deploy VotingSystem
     const VotingSystem = await hre.ethers.getContractFactory("VotingSystem");
     console.log("Deploying VotingSystem...");
-    
-    // Deploy the contract
     const votingSystem = await VotingSystem.deploy();
-    
-    // Wait for deployment transaction to be mined
     await votingSystem.waitForDeployment();
-
-    // Get the deployed contract address
     const votingSystemAddress = await votingSystem.getAddress();
     console.log("VotingSystem deployed to:", votingSystemAddress);
-    
-    // Verify the contract on Etherscan (if not on a local network)
+
+    // Deploy PublicFundTreasury
+    const PublicFundTreasury = await hre.ethers.getContractFactory("PublicFundTreasury");
+    console.log("Deploying PublicFundTreasury...");
+    const publicFundTreasury = await PublicFundTreasury.deploy();
+    await publicFundTreasury.waitForDeployment();
+    const publicFundTreasuryAddress = await publicFundTreasury.getAddress();
+    console.log("PublicFundTreasury deployed to:", publicFundTreasuryAddress);
+
+    // Verify VotingSystem (if not on a local network)
     if (network.config.chainId !== 31337 && process.env.ETHERSCAN_API_KEY) {
       console.log("Waiting for block confirmations...");
-      // Wait for 6 blocks after deployment
-      await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds
-      
+      await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30s
+
       await verify(votingSystemAddress, []);
+      await verify(publicFundTreasuryAddress, []);
     }
+
   } catch (error) {
     console.error("Deployment failed:", error);
     throw error;
@@ -34,7 +36,7 @@ async function main() {
 }
 
 async function verify(contractAddress, args) {
-  console.log("Verifying contract...");
+  console.log(`Verifying contract at ${contractAddress}...`);
   try {
     await hre.run("verify:verify", {
       address: contractAddress,

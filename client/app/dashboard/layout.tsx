@@ -18,24 +18,9 @@ const sidebarItems = [
     icon: Home,
   },
   {
-    title: "Home1",
-    href: "/dashboard/home1",
+    title: "Fund Management",
+    href: "/dashboard/fund-mangement",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Home2",
-    href: "/dashboard/home2",
-    icon: Users,
-  },
-  {
-    title: "Home3",
-    href: "/dashboard/home3",
-    icon: Wallet,
-  },
-  {
-    title: "Home4",
-    href: "/dashboard/home4",
-    icon: Settings,
   },
 ];
 
@@ -56,7 +41,7 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 text-white">
+      <aside className="w-64 bg-black text-white">
         <div className="h-full flex flex-col">
           <div className="p-6">
             <h2 className="text-2xl font-bold">Dashboard</h2>
