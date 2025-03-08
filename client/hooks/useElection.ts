@@ -78,7 +78,7 @@ const useElectionActions = (getContract: Function, electionId: number, loadElect
     }
   };
 
-  const startElection = async () => {
+  const startElection = async (electionId: number) => {
     try {
       const contract = await getContract();
       const tx = await contract.startElection(electionId);
@@ -91,7 +91,7 @@ const useElectionActions = (getContract: Function, electionId: number, loadElect
     }
   };
 
-  const stopElection = async () => {
+  const stopElection = async (electionId: number) => {
     try {
       const contract = await getContract();
       const tx = await contract.stopElection(electionId);
