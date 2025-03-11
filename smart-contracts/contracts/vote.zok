@@ -1,0 +1,15 @@
+import "hashes/poseidon/poseidon" as poseidon;
+
+// Same functionality as your Circom code
+def main(private field nullifier, private field electionId, private field candidateId, 
+         field contractAddress, field publicElectionId) -> (field, field) {
+    
+    // Calculate nullifier hash using Poseidon
+    field nullifierHash = poseidon([nullifier, electionId, contractAddress]);
+    
+    // Ensure election ID matches
+    assert(publicElectionId == electionId);
+    
+    // Output the nullifier hash and the candidate ID
+    return (nullifierHash, candidateId);
+}

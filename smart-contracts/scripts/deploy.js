@@ -1,60 +1,43 @@
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
+require("dotenv").config();
 
 async function main() {
-  try {
-    const { network } = hre;
+  const [deployer] = await ethers.getSigners();
+  console.log("Deploying contracts with the account:", deployer.address);
 
-    // Deploy VotingSystem
-    const VotingSystem = await hre.ethers.getContractFactory("VotingSystem");
-    console.log("Deploying VotingSystem...");
-    const votingSystem = await VotingSystem.deploy();
-    await votingSystem.waitForDeployment();
-    const votingSystemAddress = await votingSystem.getAddress();
-    console.log("VotingSystem deployed to:", votingSystemAddress);
+  // Deploy VoterSBT contract
+  console.log("Deploying VoterSBT...");
+  const VoterSBT = await ethers.getContractFactory("VoterSBT");
+  const voterSBT = await VoterSBT.deploy();
+  await voterSBT.waitForDeployment();
+  const voterSBTAddress = await voterSBT.getAddress();
+  console.log("VoterSBT deployed to:", voterSBTAddress);
 
-    // Deploy PublicFundTreasury
-    const PublicFundTreasury = await hre.ethers.getContractFactory("PublicFundTreasury");
-    console.log("Deploying PublicFundTreasury...");
-    const publicFundTreasury = await PublicFundTreasury.deploy();
-    await publicFundTreasury.waitForDeployment();
-    const publicFundTreasuryAddress = await publicFundTreasury.getAddress();
-    console.log("PublicFundTreasury deployed to:", publicFundTreasuryAddress);
+  // // Deploy Verifier contract (ZoKrates generated)
+  console.log("Deploying Verifier...");
+  const Verifier = await ethers.getContractFactory("Verifier");
+  const verifier = await Verifier.deploy();
+  await verifier.waitForDeployment();
+  const verifierAddress = await verifier.getAddress();
+  console.log("Verifier deployed to:", verifierAddress);
 
-    // Verify VotingSystem (if not on a local network)
-    if (network.config.chainId !== 31337 && process.env.ETHERSCAN_API_KEY) {
-      console.log("Waiting for block confirmations...");
-      await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30s
+  // Deploy ZKVotingSystem contract (with addresses of the other contracts)
+  console.log("Deploying ZKVotingSystem...");
+  const ZKVotingSystem = await ethers.getContractFactory("ZKVotingSystem");
+  const zkVotingSystem = await ZKVotingSystem.deploy(voterSBTAddress, verifierAddress);
+  await zkVotingSystem.waitForDeployment();
+  const zkVotingSystemAddress = await zkVotingSystem.getAddress();
+  console.log("ZKVotingSystem deployed to:", zkVotingSystemAddress);
 
-      await verify(votingSystemAddress, []);
-      await verify(publicFundTreasuryAddress, []);
-    }
-
-  } catch (error) {
-    console.error("Deployment failed:", error);
-    throw error;
-  }
+  
+  console.log("\nDeployment Summary:");
+  console.log("-------------------");
+  console.log("VoterSBT:         ", voterSBTAddress);
+  console.log("Verifier:         ", verifierAddress);
+  console.log("ZKVotingSystem:   ", zkVotingSystemAddress);
 }
 
-async function verify(contractAddress, args) {
-  console.log(`Verifying contract at ${contractAddress}...`);
-  try {
-    await hre.run("verify:verify", {
-      address: contractAddress,
-      constructorArguments: args,
-    });
-  } catch (e) {
-    if (e.message.toLowerCase().includes("already verified")) {
-      console.log("Already verified!");
-    } else {
-      console.log("Verification error:", e);
-    }
-  }
-}
-
-// Execute deployment
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

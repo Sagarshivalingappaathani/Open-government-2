@@ -22,7 +22,8 @@ const useMetaMask = () => {
   return { currentAddress, getCurrentAddress };
 };
 
-const useElectionData = (getContract: Function, electionId: number) => {
+const useElectionData = (getContract: Function, electionId: number, currentAddress: string) => {
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [election, setElection] = useState<any>(null);
   const [candidates, setCandidates] = useState<any[]>([]);
   const [voters, setVoters] = useState<any[]>([]);
@@ -37,7 +38,11 @@ const useElectionData = (getContract: Function, electionId: number) => {
       const contract = await getContract();
       const electionData = await contract.elections(electionId);
       setElection(electionData);
-
+      console.log(electionData.admin);
+      console.log(currentAddress);
+      if (electionData.admin === currentAddress) {
+        setIsAdmin(true);
+      }
       const [ids, names, voteCounts] = await contract.getCandidates(electionId);
       setCandidates(ids.map((id: any, index: number) => ({
         id: Number(id),
@@ -59,7 +64,7 @@ const useElectionData = (getContract: Function, electionId: number) => {
     loadElectionData();
   }, [electionId]);
 
-  return { election, candidates, voters, loading, error, loadElectionData };
+  return {isAdmin, election, candidates, voters, loading, error, loadElectionData };
 };
 
 const useElectionActions = (getContract: Function, electionId: number, loadElectionData: Function) => {

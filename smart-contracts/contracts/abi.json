@@ -1,0 +1,42 @@
+{
+  "inputs": [
+    {
+      "name": "nullifier",
+      "public": false,
+      "type": "field"
+    },
+    {
+      "name": "electionId",
+      "public": false,
+      "type": "field"
+    },
+    {
+      "name": "candidateId",
+      "public": false,
+      "type": "field"
+    },
+    {
+      "name": "contractAddress",
+      "public": true,
+      "type": "field"
+    },
+    {
+      "name": "publicElectionId",
+      "public": true,
+      "type": "field"
+    }
+  ],
+  "output": {
+    "type": "tuple",
+    "components": {
+      "elements": [
+        {
+          "type": "field"
+        },
+        {
+          "type": "field"
+        }
+      ]
+    }
+  }
+}

@@ -2,6 +2,47 @@ import { BrowserProvider, Contract } from 'ethers';
 
 export const contractABI = [
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_sbtAddress",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_verifierAddress",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "candidateId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "nullifierHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "AnonymousVote",
+      "type": "event"
+    },
+    {
       "anonymous": false,
       "inputs": [
         {
@@ -59,6 +100,12 @@ export const contractABI = [
           "internalType": "uint256",
           "name": "electionId",
           "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "startTime",
+          "type": "uint256"
         }
       ],
       "name": "ElectionStarted",
@@ -71,6 +118,12 @@ export const contractABI = [
           "indexed": false,
           "internalType": "uint256",
           "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "endTime",
           "type": "uint256"
         }
       ],
@@ -88,31 +141,6 @@ export const contractABI = [
         }
       ],
       "name": "ResultsStored",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "electionId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "candidateId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "voter",
-          "type": "address"
-        }
-      ],
-      "name": "Voted",
       "type": "event"
     },
     {
@@ -193,6 +221,21 @@ export const contractABI = [
           "internalType": "uint256",
           "name": "candidateCount",
           "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "startTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "endTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "voterCount",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -235,6 +278,30 @@ export const contractABI = [
           "type": "uint256"
         }
       ],
+      "name": "getElectionTimes",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "startTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "endTime",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_electionId",
+          "type": "uint256"
+        }
+      ],
       "name": "getResults",
       "outputs": [
         {
@@ -256,6 +323,16 @@ export const contractABI = [
           "internalType": "uint256[]",
           "name": "",
           "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -269,12 +346,12 @@ export const contractABI = [
           "type": "uint256"
         }
       ],
-      "name": "getVoters",
+      "name": "getVoterCount",
       "outputs": [
         {
-          "internalType": "address[]",
+          "internalType": "uint256",
           "name": "",
-          "type": "address[]"
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -307,6 +384,32 @@ export const contractABI = [
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "verifier",
+      "outputs": [
+        {
+          "internalType": "contract IVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "voterSBTAddress",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "uint256",
@@ -314,17 +417,32 @@ export const contractABI = [
           "type": "uint256"
         },
         {
-          "internalType": "uint256",
-          "name": "_candidateId",
-          "type": "uint256"
+          "internalType": "uint256[2]",
+          "name": "_a",
+          "type": "uint256[2]"
+        },
+        {
+          "internalType": "uint256[2][2]",
+          "name": "_b",
+          "type": "uint256[2][2]"
+        },
+        {
+          "internalType": "uint256[2]",
+          "name": "_c",
+          "type": "uint256[2]"
+        },
+        {
+          "internalType": "uint256[2]",
+          "name": "_input",
+          "type": "uint256[2]"
         }
       ],
-      "name": "vote",
+      "name": "zkVote",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
     }
-  ];
+  ]
 
 const contractAddress = process.env.NEXT_PUBLIC_VOTING_CONTRACT_ADDRESS;
 export const getContract = async () => {
