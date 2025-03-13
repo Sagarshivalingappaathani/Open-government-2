@@ -1,42 +1,41 @@
 {
   "inputs": [
     {
-      "name": "nullifier",
+      "name": "voterID",
       "public": false,
       "type": "field"
     },
     {
-      "name": "electionId",
+      "name": "electionID",
       "public": false,
       "type": "field"
     },
     {
-      "name": "candidateId",
+      "name": "candidateID",
       "public": false,
       "type": "field"
     },
     {
-      "name": "contractAddress",
+      "name": "pubElectionID",
       "public": true,
       "type": "field"
     },
     {
-      "name": "publicElectionId",
+      "name": "pubCandidateMax",
+      "public": true,
+      "type": "field"
+    },
+    {
+      "name": "nullifierHash",
       "public": true,
       "type": "field"
     }
   ],
   "output": {
-    "type": "tuple",
+    "type": "array",
     "components": {
-      "elements": [
-        {
-          "type": "field"
-        },
-        {
-          "type": "field"
-        }
-      ]
+      "size": 1,
+      "type": "field"
     }
   }
 }

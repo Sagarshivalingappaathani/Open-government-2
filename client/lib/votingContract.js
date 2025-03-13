@@ -1,6 +1,6 @@
 import { BrowserProvider, Contract } from 'ethers';
 
-export const contractABI = [
+const contractABI = [
     {
       "inputs": [
         {
@@ -22,6 +22,19 @@ export const contractABI = [
       "inputs": [
         {
           "indexed": false,
+          "internalType": "string",
+          "name": "message",
+          "type": "string"
+        }
+      ],
+      "name": "DebugLog",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "uint256",
           "name": "electionId",
           "type": "uint256"
@@ -29,118 +42,11 @@ export const contractABI = [
         {
           "indexed": false,
           "internalType": "uint256",
-          "name": "candidateId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "bytes32",
           "name": "nullifierHash",
-          "type": "bytes32"
-        }
-      ],
-      "name": "AnonymousVote",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "electionId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "candidateId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
-        }
-      ],
-      "name": "CandidateAdded",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "electionId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
-        },
-        {
-          "indexed": false,
-          "internalType": "address",
-          "name": "admin",
-          "type": "address"
-        }
-      ],
-      "name": "ElectionCreated",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "electionId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "startTime",
           "type": "uint256"
         }
       ],
-      "name": "ElectionStarted",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "electionId",
-          "type": "uint256"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "endTime",
-          "type": "uint256"
-        }
-      ],
-      "name": "ElectionStopped",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "electionId",
-          "type": "uint256"
-        }
-      ],
-      "name": "ResultsStored",
+      "name": "VoteCast",
       "type": "event"
     },
     {
@@ -363,6 +269,30 @@ export const contractABI = [
           "internalType": "uint256",
           "name": "_electionId",
           "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_nullifierHash",
+          "type": "uint256"
+        }
+      ],
+      "name": "isVoted",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_electionId",
+          "type": "uint256"
         }
       ],
       "name": "startElection",
@@ -398,10 +328,10 @@ export const contractABI = [
     },
     {
       "inputs": [],
-      "name": "voterSBTAddress",
+      "name": "voterSBT",
       "outputs": [
         {
-          "internalType": "address",
+          "internalType": "contract IVoterSBT",
           "name": "",
           "type": "address"
         }
@@ -417,24 +347,29 @@ export const contractABI = [
           "type": "uint256"
         },
         {
+          "internalType": "uint256",
+          "name": "_candidateId",
+          "type": "uint256"
+        },
+        {
           "internalType": "uint256[2]",
-          "name": "_a",
+          "name": "a",
           "type": "uint256[2]"
         },
         {
           "internalType": "uint256[2][2]",
-          "name": "_b",
+          "name": "b",
           "type": "uint256[2][2]"
         },
         {
           "internalType": "uint256[2]",
-          "name": "_c",
+          "name": "c",
           "type": "uint256[2]"
         },
         {
-          "internalType": "uint256[2]",
-          "name": "_input",
-          "type": "uint256[2]"
+          "internalType": "uint256",
+          "name": "_nullifierHash",
+          "type": "uint256"
         }
       ],
       "name": "zkVote",
@@ -443,7 +378,6 @@ export const contractABI = [
       "type": "function"
     }
   ]
-
 const contractAddress = process.env.NEXT_PUBLIC_VOTING_CONTRACT_ADDRESS;
 export const getContract = async () => {
   if (typeof window.ethereum === "undefined") {

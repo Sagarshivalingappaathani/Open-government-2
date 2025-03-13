@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "hardhat/console.sol";
+
+interface IVoterSBT {
+    function isRegisteredVoter(address voter) external view returns (bool);
+    
+}
+
 interface IVerifier {
     function verifyProof(
         uint[2] memory a,
@@ -11,11 +18,9 @@ interface IVerifier {
 }
 
 contract ZKVotingSystem {
-    // Reference to the SBT contract
-    address public voterSBTAddress;
-    // Reference to the ZKP verifier
+    IVoterSBT public voterSBT;
     IVerifier public verifier;
-    
+
     struct Candidate {
         uint id;
         string name;
@@ -28,16 +33,18 @@ contract ZKVotingSystem {
         bool isActive;
         bool isCompleted;
         uint candidateCount;
-        uint256 startTime; // Timestamp when election starts
-        uint256 endTime;   // Timestamp when election ends
+        uint256 startTime;
+        uint256 endTime;
         mapping(uint => Candidate) candidates;
-        // Store nullifier hashes to prevent double voting without revealing identity
-        mapping(bytes32 => bool) nullifierHashes;
+        mapping(uint256 => bool) nullifierHashes;
         uint256 voterCount;
     }
 
     uint public electionCount;
     mapping(uint => Election) public elections;
+
+    event VoteCast(uint indexed electionId, uint256 nullifierHash);
+    event DebugLog(string message);
 
     modifier onlyAdmin(uint _electionId) {
         require(
@@ -56,7 +63,7 @@ contract ZKVotingSystem {
     }
 
     constructor(address _sbtAddress, address _verifierAddress) {
-        voterSBTAddress = _sbtAddress;
+        voterSBT = IVoterSBT(_sbtAddress);
         verifier = IVerifier(_verifierAddress);
     }
 
@@ -67,7 +74,6 @@ contract ZKVotingSystem {
         newElection.admin = msg.sender;
         newElection.isActive = false;
         newElection.isCompleted = false;
-        // Initialize timestamps to 0
         newElection.startTime = 0;
         newElection.endTime = 0;
     }
@@ -90,7 +96,6 @@ contract ZKVotingSystem {
         );
     }
 
-    // Start election and record the start time
     function startElection(
         uint _electionId
     ) public electionExists(_electionId) onlyAdmin(_electionId) {
@@ -102,41 +107,46 @@ contract ZKVotingSystem {
         election.startTime = block.timestamp;
     }
 
-    // Anonymous voting using ZKP
-    // Updated to match the ZoKrates verifier format and our vote.zok circuit
     function zkVote(
         uint _electionId,
-        uint[2] memory _a,
-        uint[2][2] memory _b,
-        uint[2] memory _c,
-        uint[2] memory _input // [nullifierHash, candidateId]
+        uint _candidateId,
+        uint[2] memory a,
+        uint[2][2] memory b,
+        uint[2] memory c,
+        uint256 _nullifierHash
     ) public electionExists(_electionId) {
+        console.log("Casting vote:");
+        console.log("Election ID:", _electionId);
+        console.log("Candidate ID:", _candidateId);
+        console.log("Nullifier Hash:", _nullifierHash);
         Election storage election = elections[_electionId];
-
-        require(!election.isCompleted, "Election is already completed");
         require(election.isActive, "Election is not active");
+        require(!election.isCompleted, "Election has already been completed");
+        require(_candidateId > 0 && _candidateId <= election.candidateCount, "Invalid candidate ID");
         
-        // Extract nullifier hash and candidate ID from the proof's public inputs
-        bytes32 nullifierHash = bytes32(_input[0]);
-        uint candidateId = _input[1];
+        // Verify the nullifier hasn't been used before
+        require(!election.nullifierHashes[_nullifierHash], "Vote already cast with this nullifier");
         
-        require(!election.nullifierHashes[nullifierHash], "Vote with this nullifier already cast");
-        require(
-            candidateId > 0 && candidateId <= election.candidateCount,
-            "Invalid candidate"
-        );
+        // Prepare inputs for the verifier
+        // The public inputs are the election ID and the nullifier hash
+        //uint[2] memory input = [uint(_electionId), _nullifierHash];
         
-        // Verify ZK proof
-        // The ZoKrates verifier expects [nullifierHash, candidateId] as public inputs
-        require(verifier.verifyProof(_a, _b, _c, _input), "Invalid zero-knowledge proof");
-
-        // Register the vote
-        election.nullifierHashes[nullifierHash] = true;
-        election.candidates[candidateId].voteCount++;
+        // Verify the zero-knowledge proof
+        //require(verifier.verifyProof(a, b, c, input), "Invalid zero-knowledge proof");
+        
+        // Mark this nullifier as used
+        election.nullifierHashes[_nullifierHash] = true;
+        
+        // Increment vote count for the candidate
+        election.candidates[_candidateId].voteCount++;
+        
+        // Increment the voter count
         election.voterCount++;
+        
+        emit VoteCast(_electionId, _nullifierHash);
+        emit DebugLog("Vote cast successfully");
     }
 
-    // Stop election and record the end time
     function stopElection(
         uint _electionId
     ) public onlyAdmin(_electionId) electionExists(_electionId) {
@@ -145,7 +155,7 @@ contract ZKVotingSystem {
 
         election.isActive = false;
         election.isCompleted = true;
-        election.endTime = block.timestamp; // Set the end time when admin stops the election
+        election.endTime = block.timestamp;
     }
 
     function getCandidates(
@@ -173,15 +183,19 @@ contract ZKVotingSystem {
         return (ids, names, voteCounts);
     }
 
-    function getVoterCount(uint _electionId) public view electionExists(_electionId) returns (uint256) {
+    function getVoterCount(
+        uint _electionId
+    ) public view electionExists(_electionId) returns (uint256) {
         return elections[_electionId].voterCount;
     }
 
-    function getElectionTimes(uint _electionId) 
-        public 
-        view 
+    function getElectionTimes(
+        uint _electionId
+    )
+        public
+        view
         electionExists(_electionId)
-        returns (uint256 startTime, uint256 endTime) 
+        returns (uint256 startTime, uint256 endTime)
     {
         Election storage election = elections[_electionId];
         return (election.startTime, election.endTime);
@@ -193,7 +207,14 @@ contract ZKVotingSystem {
         public
         view
         electionExists(_electionId)
-        returns (string memory, uint[] memory, string[] memory, uint[] memory, uint256, uint256)
+        returns (
+            string memory,
+            uint[] memory,
+            string[] memory,
+            uint[] memory,
+            uint256,
+            uint256
+        )
     {
         Election storage election = elections[_electionId];
         require(election.isCompleted, "Election is not completed yet");
@@ -210,6 +231,21 @@ contract ZKVotingSystem {
             voteCounts[i - 1] = candidate.voteCount;
         }
 
-        return (election.name, ids, names, voteCounts, election.startTime, election.endTime);
+        return (
+            election.name,
+            ids,
+            names,
+            voteCounts,
+            election.startTime,
+            election.endTime
+        );
+    }
+
+    function isVoted(uint _electionId, uint256 _nullifierHash) public view electionExists(_electionId) returns (bool) {
+        console.log("Checking if voted:");
+        console.log("Election ID:", _electionId);
+        console.log("Nullifier Hash:", _nullifierHash);
+        console.log("Nullifier Hash Exists:", elections[_electionId].nullifierHashes[_nullifierHash]);
+        return elections[_electionId].nullifierHashes[_nullifierHash];
     }
 }

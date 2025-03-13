@@ -25,7 +25,7 @@ export default function DashboardHome() {
           
             <div className="space-y-4 pt-2">
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="/dashboard/fund-management">
+                <Link href="/dashboard/fund-mangement">
                   <Button size="lg" className="gap-2 w-full sm:w-auto">
                     <Coins className="w-4 h-4" />
                     Fund Management

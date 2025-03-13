@@ -66,4 +66,16 @@ contract VoterSBT is ERC721, Ownable {
     function getApplicantCount() public view onlyOwner returns (uint128) {
         return applicantCount;
     }
+
+    //get token id by address
+    function getTokenIdByAddress(address _address) public view returns (uint256) {
+        //check if the address is there in the map
+        require(voterData[_address].isRegistered, "Address not registered");
+        return voterData[_address].tokenId;
+    }
+
+    function getNullifierByAddress(address _address) public view returns (uint128) {
+        require(voterData[_address].isRegistered, "Address not registered");
+        return voterData[_address].nullifier;
+    }
 }
