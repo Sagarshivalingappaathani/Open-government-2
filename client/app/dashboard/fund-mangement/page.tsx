@@ -1,12 +1,12 @@
-'use client';
-
-import { useState, useEffect } from 'react';
+"use client"
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { getPublicFundingContract } from '@/lib/publicFundingContract';
 import { toast } from 'react-hot-toast';
 import {
@@ -35,8 +35,21 @@ import {
   FileCheck,
   UserCheck,
   AlertCircle,
+  FileText,
+  ArrowUpRight,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+
+
+interface StageDetails {
+  currentStage: number;
+  totalStages: number;
+  stageReport: string;
+  stageApprovalCount: number;
+  stageLocked: boolean;
+}
 
 interface Proposal {
   id: number;
@@ -47,6 +60,7 @@ interface Proposal {
   approved: boolean;
   executed: boolean;
   createdAt: number;
+  stageDetails?: StageDetails;
 }
 
 export default function FundManagement() {
@@ -59,6 +73,7 @@ export default function FundManagement() {
   const [requiredApprovals, setRequiredApprovals] = useState<number>(0);
   const [newRequiredApprovals, setNewRequiredApprovals] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [stageReport, setStageReport] = useState('');
   const [errors, setErrors] = useState({
     deposit: '',
     proposal: {
@@ -67,6 +82,15 @@ export default function FundManagement() {
       recipient: '',
     },
   });
+
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState('');
+
+  // Add this function to your component
+  const openReportModal = (report: any) => {
+    setSelectedReport(report);
+    setReportModalOpen(true);
+  };
 
   // Form states
   const [depositAmount, setDepositAmount] = useState('');
@@ -107,6 +131,8 @@ export default function FundManagement() {
 
         for (let i = 1; i <= Number(proposalCount); i++) {
           const proposal = await contract.proposals(i);
+          const stageDetails = await contract.getProposalStageDetails(i);
+
           loadedProposals.push({
             id: Number(proposal.id),
             description: proposal.description,
@@ -115,13 +141,20 @@ export default function FundManagement() {
             approvalCount: Number(proposal.approvalCount),
             approved: proposal.approved,
             executed: proposal.executed,
-            createdAt: Number(proposal.createdAt)
+            createdAt: Number(proposal.createdAt),
+            stageDetails: {
+              currentStage: Number(stageDetails.currentStage),
+              totalStages: Number(stageDetails.totalStages),
+              stageReport: stageDetails.stageReport,
+              stageApprovalCount: Number(stageDetails.stageApprovalCount),
+              stageLocked: stageDetails.stageLocked
+            }
           });
         }
         setProposals(loadedProposals.reverse());
       } catch (error) {
         console.error('Initialization error:', error);
-        toast.error('Failed to initialize the application. Please check your wallet connection.');
+        toast.error('Failed to initialize the application.');
       }
     };
 
@@ -129,7 +162,7 @@ export default function FundManagement() {
 
     // Listen for account changes
     if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts : any) => {
+      window.ethereum.on('accountsChanged', (accounts: any) => {
         if (accounts.length > 0) {
           setAccount(accounts[0]);
         } else {
@@ -145,7 +178,6 @@ export default function FundManagement() {
       }
     };
   }, [account]);
-
 
   const handleDeposit = async () => {
     try {
@@ -265,6 +297,8 @@ export default function FundManagement() {
       // Refresh proposals
       const proposalCount = await contract.proposalCount();
       const proposal = await contract.proposals(proposalCount);
+      const stageDetails = await contract.getProposalStageDetails(proposalCount);
+
       setProposals([{
         id: Number(proposal.id),
         description: proposal.description,
@@ -273,7 +307,14 @@ export default function FundManagement() {
         approvalCount: Number(proposal.approvalCount),
         approved: proposal.approved,
         executed: proposal.executed,
-        createdAt: Number(proposal.createdAt)
+        createdAt: Number(proposal.createdAt),
+        stageDetails: {
+          currentStage: Number(stageDetails.currentStage),
+          totalStages: Number(stageDetails.totalStages),
+          stageReport: stageDetails.stageReport,
+          stageApprovalCount: Number(stageDetails.stageApprovalCount),
+          stageLocked: stageDetails.stageLocked
+        }
       }, ...proposals]);
     } catch (error) {
       console.error('Submit proposal error:', error);
@@ -290,60 +331,197 @@ export default function FundManagement() {
       await tx.wait();
       toast.success('Vote cast successfully!');
 
-      // Refresh proposal data
-      const proposal = await contract.proposals(proposalId);
-      const updatedProposals = proposals.map(p =>
-        p.id === proposalId
-          ? {
-            ...p,
-            approvalCount: Number(proposal.approvalCount),
-            approved: proposal.approved
-          }
-          : p
-      );
-      setProposals(updatedProposals);
+      await refreshProposalData(proposalId);
     } catch (error) {
       console.error('Vote error:', error);
       toast.error('Failed to cast vote. You may have already voted on this proposal.');
     }
   };
 
-  const handleReleaseFunds = async (proposalId: number) => {
+  const handleSubmitStageReport = async (proposalId: number) => {
+    try {
+      if (!stageReport.trim()) {
+        toast.error('Please provide a stage report');
+        return;
+      }
+
+      const contract = await getPublicFundingContract();
+      const tx = await contract.submitStageReport(proposalId, stageReport);
+
+      toast.success('Submitting stage report. Please wait for confirmation...');
+      await tx.wait();
+      toast.success('Stage report submitted successfully!');
+
+      setStageReport('');
+      await refreshProposalData(proposalId);
+    } catch (error) {
+      console.error('Submit stage report error:', error);
+      toast.error('Failed to submit stage report. Please try again.');
+    }
+  };
+
+  const handleApproveStage = async (proposalId: number) => {
     try {
       const contract = await getPublicFundingContract();
-      const tx = await contract.releaseFunds(proposalId);
+      const tx = await contract.approveStage(proposalId);
 
-      toast.success('Releasing funds. Please wait for confirmation...');
+      toast.success('Approving stage. Please wait for confirmation...');
       await tx.wait();
-      toast.success('Funds released successfully!');
+      toast.success('Stage approved successfully!');
 
-      // Refresh proposal and balance
-      const proposal = await contract.proposals(proposalId);
+      await refreshProposalData(proposalId);
+    } catch (error) {
+      console.error('Approve stage error:', error);
+      toast.error('Failed to approve stage. You may have already approved this stage.');
+    }
+  };
+
+  const handleReleaseInitialFunds = async (proposalId: number) => {
+    try {
+      const contract = await getPublicFundingContract();
+      const tx = await contract.releaseInitialFunds(proposalId);
+
+      toast.success('Releasing initial funds. Please wait for confirmation...');
+      await tx.wait();
+      toast.success('Initial funds released successfully!');
+
+      await refreshProposalData(proposalId);
       const newBalance = await contract.getTreasuryBalance();
       setBalance(ethers.formatEther(newBalance));
+    } catch (error) {
+      console.error('Release initial funds error:', error);
+      toast.error('Failed to release initial funds. Please check requirements.');
+    }
+  };
+
+  const handleReleaseNextStageFunds = async (proposalId: number) => {
+    try {
+      const contract = await getPublicFundingContract();
+      const tx = await contract.releaseNextStageFunds(proposalId);
+
+      toast.success('Releasing next stage funds. Please wait for confirmation...');
+      await tx.wait();
+      toast.success('Next stage funds released successfully!');
+
+      await refreshProposalData(proposalId);
+      const newBalance = await contract.getTreasuryBalance();
+      setBalance(ethers.formatEther(newBalance));
+    } catch (error) {
+      console.error('Release next stage funds error:', error);
+      toast.error('Failed to release next stage funds. Please check requirements.');
+    }
+  };
+
+  const refreshProposalData = async (proposalId: number) => {
+    try {
+      const contract = await getPublicFundingContract();
+      const proposal = await contract.proposals(proposalId);
+      const stageDetails = await contract.getProposalStageDetails(proposalId);
 
       const updatedProposals = proposals.map(p =>
         p.id === proposalId
-          ? { ...p, executed: proposal.executed }
+          ? {
+            ...p,
+            approvalCount: Number(proposal.approvalCount),
+            approved: proposal.approved,
+            executed: proposal.executed,
+            stageDetails: {
+              currentStage: Number(stageDetails.currentStage),
+              totalStages: Number(stageDetails.totalStages),
+              stageReport: stageDetails.stageReport,
+              stageApprovalCount: Number(stageDetails.stageApprovalCount),
+              stageLocked: stageDetails.stageLocked
+            }
+          }
           : p
       );
       setProposals(updatedProposals);
     } catch (error) {
-      console.error('Release funds error:', error);
-      toast.error('Failed to release funds. Please check the treasury balance.');
+      console.error('Refresh proposal data error:', error);
     }
   };
 
   const getStatusColor = (proposal: Proposal) => {
     if (proposal.executed) return 'text-green-600';
+    if (proposal.stageDetails?.currentStage === 1) return 'text-purple-600';
     if (proposal.approved) return 'text-blue-600';
     return 'text-orange-600';
   };
 
   const getStatusIcon = (proposal: Proposal) => {
     if (proposal.executed) return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+    if (proposal.stageDetails?.currentStage === 1) return <ArrowUpRight className="w-4 h-4 text-purple-600" />;
     if (proposal.approved) return <CheckCircle2 className="w-4 h-4 text-blue-600" />;
     return <Clock className="w-4 h-4 text-orange-600" />;
+  };
+
+  const renderStageActions = (proposal: Proposal) => {
+    if (!proposal.stageDetails) return null;
+    const { currentStage, stageLocked, stageApprovalCount } = proposal.stageDetails;
+
+    if (proposal.executed) return null;
+
+    if (currentStage === 0 && proposal.approved) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleReleaseInitialFunds(proposal.id)}
+          className="text-blue-600 hover:text-blue-700"
+        >
+          <Send className="w-4 h-4 mr-1" /> Release Initial Funds
+        </Button>
+      );
+    }
+
+    if (currentStage === 1) {
+      if (proposal.recipient.toLowerCase() === account.toLowerCase() && !stageLocked) {
+        return (
+          <div className="space-y-2">
+            <Textarea
+              placeholder="Enter stage completion report..."
+              value={stageReport}
+              onChange={(e) => setStageReport(e.target.value)}
+              className="min-h-[100px]"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSubmitStageReport(proposal.id)}
+            >
+              <FileText className="w-4 h-4 mr-1" /> Submit Report
+            </Button>
+          </div>
+        );
+      }
+
+      if (isAuthority && stageLocked && stageApprovalCount < requiredApprovals) {
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleApproveStage(proposal.id)}
+          >
+            <CheckCircle2 className="w-4 h-4 mr-1" /> Approve Stage
+          </Button>
+        );
+      }
+
+      if (stageApprovalCount >= requiredApprovals) {
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleReleaseNextStageFunds(proposal.id)}
+            className="text-green-600 hover:text-green-700"
+          >
+            <Send className="w-4 h-4 mr-1" /> Release Final Funds
+          </Button>
+        );
+      }
+    }
+
+    return null;
   };
 
   const validateDeposit = (amount: string): boolean => {
@@ -357,7 +535,7 @@ export default function FundManagement() {
       return false;
     }
     try {
-      ethers.parseEther(amount); // Check if the amount is valid ETH 
+      ethers.parseEther(amount);
     } catch (error) {
       setErrors(prev => ({ ...prev, deposit: 'Invalid ETH amount' }));
       return false;
@@ -604,6 +782,7 @@ export default function FundManagement() {
                       className="h-14 text-lg bg-black hover:bg-gray-900 transition-colors"
                       disabled={isLoading || Object.values(errors.proposal).some(error => !!error)}
                     >
+
                       {isLoading ? (
                         <div className="flex items-center gap-3">
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -645,7 +824,25 @@ export default function FundManagement() {
                       {proposals.map((proposal) => (
                         <TableRow key={proposal.id}>
                           <TableCell className="font-mono">#{proposal.id}</TableCell>
-                          <TableCell className="max-w-xs truncate">{proposal.description}</TableCell>
+
+                          <TableCell className="max-w-xs truncate">
+                            <div className="space-y-1">
+                              <p>{proposal.description}</p>
+                              {proposal.stageDetails?.stageReport && (
+                                <div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-xs text-blue-600 p-0 h-auto hover:bg-transparent hover:underline"
+                                    onClick={() => openReportModal(proposal.stageDetails?.stageReport)}
+                                  >
+                                    See Report Details
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+
                           <TableCell className="font-mono">{parseFloat(proposal.amount).toFixed(4)} ETH</TableCell>
                           <TableCell className="font-mono text-xs">
                             {proposal.recipient.slice(0, 6)}...{proposal.recipient.slice(-4)}
@@ -654,6 +851,11 @@ export default function FundManagement() {
                             <div className="flex items-center gap-1">
                               <span className="font-bold">{proposal.approvalCount}</span>
                               <span className="text-gray-500">/ {requiredApprovals}</span>
+                              {proposal.stageDetails?.currentStage === 1 && (
+                                <div className="ml-2 text-sm text-purple-600">
+                                  Stage: {proposal.stageDetails.stageApprovalCount}/{requiredApprovals}
+                                </div>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -662,9 +864,11 @@ export default function FundManagement() {
                               <span className={getStatusColor(proposal)}>
                                 {proposal.executed
                                   ? 'Executed'
-                                  : proposal.approved
-                                    ? 'Approved'
-                                    : 'Pending'}
+                                  : proposal.stageDetails?.currentStage === 1
+                                    ? `Stage ${proposal.stageDetails.currentStage}`
+                                    : proposal.approved
+                                      ? 'Approved'
+                                      : 'Pending'}
                               </span>
                             </div>
                           </TableCell>
@@ -672,8 +876,8 @@ export default function FundManagement() {
                             {format(proposal.createdAt * 1000, 'MMM d, yyyy')}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              {!proposal.executed && isAuthority && (
+                            <div className="flex flex-col gap-2">
+                              {!proposal.executed && !proposal.approved && isAuthority && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -682,16 +886,7 @@ export default function FundManagement() {
                                   <Vote className="w-4 h-4 mr-1" /> Vote
                                 </Button>
                               )}
-                              {proposal.approved && !proposal.executed && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleReleaseFunds(proposal.id)}
-                                  className="text-green-600 hover:text-green-700"
-                                >
-                                  <Send className="w-4 h-4 mr-1" /> Release
-                                </Button>
-                              )}
+                              {renderStageActions(proposal)}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -884,6 +1079,24 @@ export default function FundManagement() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {/*See Report deails Dailog Box*/}
+      <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Stage Report</DialogTitle>
+          </DialogHeader>
+          <div className="p-4 bg-gray-50 rounded-md">
+            <p className="whitespace-pre-wrap">{selectedReport}</p>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="outline" onClick={() => setReportModalOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }

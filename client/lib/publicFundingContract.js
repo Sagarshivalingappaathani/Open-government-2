@@ -96,6 +96,12 @@ const publicFundingContractABI = [
           "internalType": "uint256",
           "name": "amount",
           "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "stage",
+          "type": "uint8"
         }
       ],
       "name": "FundsReleased",
@@ -146,6 +152,75 @@ const publicFundingContractABI = [
       "type": "event"
     },
     {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "proposalId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "stage",
+          "type": "uint8"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "authority",
+          "type": "address"
+        }
+      ],
+      "name": "StageApproved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "proposalId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "stage",
+          "type": "uint8"
+        }
+      ],
+      "name": "StageCompleted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "proposalId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "stage",
+          "type": "uint8"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "report",
+          "type": "string"
+        }
+      ],
+      "name": "StageReportSubmitted",
+      "type": "event"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",
@@ -154,6 +229,19 @@ const publicFundingContractABI = [
         }
       ],
       "name": "addAuthority",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "approveStage",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -243,6 +331,45 @@ const publicFundingContractABI = [
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getProposalStageDetails",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "currentStage",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint8",
+          "name": "totalStages",
+          "type": "uint8"
+        },
+        {
+          "internalType": "string",
+          "name": "stageReport",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "stageApprovalCount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "stageLocked",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "getTreasuryBalance",
       "outputs": [
@@ -250,6 +377,30 @@ const publicFundingContractABI = [
           "internalType": "uint256",
           "name": "",
           "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_authority",
+          "type": "address"
+        }
+      ],
+      "name": "hasApprovedStage",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -373,6 +524,31 @@ const publicFundingContractABI = [
           "internalType": "uint256",
           "name": "createdAt",
           "type": "uint256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "currentStage",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint8",
+          "name": "totalStages",
+          "type": "uint8"
+        },
+        {
+          "internalType": "string",
+          "name": "stageReport",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "stageApprovalCount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "stageLocked",
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -386,7 +562,20 @@ const publicFundingContractABI = [
           "type": "uint256"
         }
       ],
-      "name": "releaseFunds",
+      "name": "releaseInitialFunds",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        }
+      ],
+      "name": "releaseNextStageFunds",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -436,6 +625,24 @@ const publicFundingContractABI = [
         }
       ],
       "name": "submitProposal",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_proposalId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "_report",
+          "type": "string"
+        }
+      ],
+      "name": "submitStageReport",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

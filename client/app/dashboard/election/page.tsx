@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import { getContract } from '@/lib/votingContract';
 import { getSBTContract } from '@/lib/sbtTokenContract';
 import { Contract, ethers } from 'ethers';
-import { AlertCircle, CheckCircle, ExternalLink, Link, Loader2 } from 'lucide-react';
-import { toast } from 'react-hot-toast'
+import { AlertCircle, ExternalLink, Loader2, Shield, Lock, FileCheck, Vote, Key, CheckCircle, Users, BarChart3, Clock, Zap } from 'lucide-react';
+
+import { toast } from 'react-hot-toast';
 
 // Define contract interfaces
 interface Candidate {
@@ -56,6 +56,7 @@ const VotingPage: React.FC = () => {
   const [success, setSuccess] = useState<string>('');
   const [applications, setApplications] = useState<string[]>([]);
   const [txLoading, setTxLoading] = useState<TransactionState>({});
+  const [activeTab, setActiveTab] = useState('overview');
 
   // SBT Application states
   const [fullName, setFullName] = useState<string>('');
@@ -119,40 +120,30 @@ const VotingPage: React.FC = () => {
   // Handle account changes
   const handleAccountsChanged = async (accounts: string[]) => {
     if (accounts.length === 0) {
-      // User disconnected their wallet
       setAccount('');
       setContract(null);
       setSbtContract(null);
     } else {
-      // User switched accounts
       setAccount(accounts[0]);
-
-      // Refresh data for the new account
       try {
         setLoading(true);
-
-        // Re-fetch contracts
         const zkVotingContract = await getContract();
         setContract(zkVotingContract);
 
         const sbtTokenContract: Contract = await getSBTContract();
         setSbtContract(sbtTokenContract);
 
-        // Re-fetch admin status and reset user application
         const contractAdmin = await sbtTokenContract.getAdminAddress();
         setAdmin(contractAdmin);
         setUserApplication(null);
-
-        // Clear states that might be specific to the previous account
         setApplications([]);
         setTxLoading({});
 
-        // Re-fetch data
-        fetchElections();
-        checkSBTStatus();
-        if (contractAdmin.toLowerCase() === accounts[0].toLowerCase()) {
-          getAllPendingApplications();
-        }
+        await Promise.all([
+          fetchElections(),
+          checkSBTStatus(),
+          contractAdmin.toLowerCase() === accounts[0].toLowerCase() ? getAllPendingApplications() : Promise.resolve()
+        ]);
 
         setLoading(false);
       } catch (err: any) {
@@ -187,7 +178,7 @@ const VotingPage: React.FC = () => {
       setSuccess(`Election "${newElectionName}" created successfully!`);
       setNewElectionName('');
       fetchElections();
-      toast.success('Elections loaded successfully');
+      toast.success('Election created successfully');
     } catch (err: any) {
       setError(err.message || 'Failed to create election');
       toast.error(err.message || 'Failed to create election');
@@ -206,10 +197,7 @@ const VotingPage: React.FC = () => {
       const electionsList: Election[] = [];
 
       for (let i = 1; i <= electionCount; i++) {
-        // Get basic election data
         const election = await contract.elections(i);
-
-        // Get candidates data
         const [ids, names, voteCounts] = await contract.getCandidates(i);
         const candidates: Candidate[] = ids.map((id: any, index: number) => ({
           id: Number(id),
@@ -278,23 +266,17 @@ const VotingPage: React.FC = () => {
 
     try {
       setTransactionLoading('applySBT', true);
-
-      // Create a voter hash using keccak256 of fullName + email + address
       const dataToHash = ethers.solidityPacked(
         ['string', 'string', 'address'],
         [fullName, email, account]
       );
       const voterHash = ethers.keccak256(dataToHash);
-
-      // Call the contract method
       const tx = await sbtContract.applyForSBT(voterHash);
       await tx.wait();
       toast.success('SBT application submitted successfully');
       setSuccess('Your SBT application has been submitted successfully!');
       setFullName('');
       setEmail('');
-
-      // Refresh the application status
       checkSBTStatus();
     } catch (err: any) {
       setError(err.message || 'Failed to submit SBT application');
@@ -305,16 +287,7 @@ const VotingPage: React.FC = () => {
   };
 
   const getAllPendingApplications = async () => {
-    setError('');
-    setSuccess('');
-
-    if (!sbtContract) {
-      return;
-    }
-
-    if (admin.toLowerCase() !== account.toLowerCase()) {
-      return;
-    }
+    if (!sbtContract || admin.toLowerCase() !== account.toLowerCase()) return;
 
     try {
       setTransactionLoading('getPendingApps', true);
@@ -323,27 +296,24 @@ const VotingPage: React.FC = () => {
       for (let i = 0; i < applicantCount; i++) {
         const applicant = await sbtContract.getApplicantByIndex(i);
         const [hasApplied, isRegistered] = await sbtContract.getApplicationStatus(applicant);
-
         if (hasApplied && !isRegistered) {
           pendingApplications.push(applicant);
         }
       }
-
       setApplications(pendingApplications);
     } catch (err: any) {
       setError('Failed to fetch pending applications');
+      toast.error('Failed to fetch pending applications');
     } finally {
       setTransactionLoading('getPendingApps', false);
     }
   };
 
-  // Format timestamp
   const formatTime = (timestamp: number) => {
     if (!timestamp) return 'Not set';
     return new Date(timestamp * 1000).toLocaleString();
   };
 
-  // Get election status
   const getElectionStatus = (election: Election) => {
     if (election.isCompleted) return "Completed";
     if (election.isActive) return "Active";
@@ -358,16 +328,13 @@ const VotingPage: React.FC = () => {
     const txKey = `approve_${application}`;
     try {
       setTransactionLoading(txKey, true);
-
       if (!sbtContract) {
         setError('Please connect your wallet first');
         return;
       }
-
       const nullifier = generateRandomNullifier();
       const tx = await sbtContract.approveApplication(application, nullifier);
       await tx.wait();
-
       setSuccess('Application approved successfully!');
       getAllPendingApplications();
       toast.success('Application approved successfully!');
@@ -379,7 +346,6 @@ const VotingPage: React.FC = () => {
     }
   };
 
-  // Effect to connect wallet and load initial data
   useEffect(() => {
     connectWallet().then(() => {
       setLoading(false);
@@ -390,7 +356,6 @@ const VotingPage: React.FC = () => {
       setIsMainLoading(false);
     });
 
-    // Cleanup function to remove event listeners
     return () => {
       if (window.ethereum) {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
@@ -398,14 +363,12 @@ const VotingPage: React.FC = () => {
     };
   }, []);
 
-  // Fetch elections when contract is available
   useEffect(() => {
     if (contract) {
       fetchElections();
     }
   }, [contract]);
 
-  // Check SBT status when sbtContract and account are available
   useEffect(() => {
     if (sbtContract && account) {
       checkSBTStatus();
@@ -426,643 +389,336 @@ const VotingPage: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-6 text-center">ZK Voting System</h1>
-
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          {account ? (
-            <div className="flex items-center">
-              <div className="w-2 h-2 rounded-full bg-gray-800 mr-2"></div>
-              <p className="text-sm">
-                Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}
-              </p>
-            </div>
-          ) : (
-            <div className="flex items-center">
-              <div className="w-2 h-2 rounded-full bg-gray-300 mr-2"></div>
-              <p className="text-sm text-gray-500">Not connected</p>
-            </div>
-          )}
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto py-8 px-4">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-center mb-2">ZK Voting System</h1>
+          <p className="text-center text-gray-600">Secure, Private, and Verifiable Elections</p>
         </div>
-        <Button
-          onClick={connectWallet}
-          variant={account ? "outline" : "default"}
-          disabled={txLoading['connectWallet']}
-        >
-          {txLoading['connectWallet'] ? (
-            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
-          ) : account ? (
-            "Connected"
-          ) : (
-            "Connect Wallet"
-          )}
-        </Button>
-      </div>
 
-      {error && (
-        <div className="bg-gray-50 border border-gray-200 text-gray-800 p-3 rounded mb-4 flex items-start">
-          <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0 text-gray-800" />
-          <p>{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-gray-50 border border-gray-200 text-gray-800 p-3 rounded mb-4 flex items-start">
-          <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0 text-gray-800" />
-          <p>{success}</p>
-        </div>
-      )}
-
-      <Tabs defaultValue="elections" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-6">
-          <TabsTrigger value="elections">Elections List</TabsTrigger>
-          <TabsTrigger value="create">Create Election</TabsTrigger>
-          <TabsTrigger value="sbt">SBT Application</TabsTrigger>
-          {admin?.toLowerCase() === account?.toLowerCase() && (
-            <TabsTrigger value="admin">Admin Dashboard</TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="elections">
-          <Card>
-            <CardHeader>
-              <CardTitle>All Elections</CardTitle>
-              <CardDescription>
-                View all available elections and their details
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8 flex flex-col items-center">
-                  <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                  <p>Loading elections...</p>
-                </div>
-              ) : elections.length === 0 ? (
-                <div className="text-center py-8 border rounded-md p-4 bg-gray-50">
-                  <p>No elections found. Create one!</p>
-                </div>
-              ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Candidates</TableHead>
-                        <TableHead>Votes</TableHead>
-                        <TableHead>Start Time</TableHead>
-                        <TableHead>End Time</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {elections.map((election) => (
-                        <TableRow key={election.id}>
-                          <TableCell>{election.id}</TableCell>
-                          <TableCell>{election.name}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 text-xs rounded-full ${election.isCompleted
-                              ? 'bg-gray-100 text-gray-700'
-                              : election.isActive
-                                ? 'bg-gray-800 text-white'
-                                : 'bg-gray-200 text-gray-800'
-                              }`}>
-                              {getElectionStatus(election)}
-                            </span>
-                          </TableCell>
-                          <TableCell>{election.candidateCount}</TableCell>
-                          <TableCell>{election.voterCount}</TableCell>
-                          <TableCell>{formatTime(election.startTime)}</TableCell>
-                          <TableCell>{formatTime(election.endTime)}</TableCell>
-                          <TableCell className="text-right">
-                            <a
-                              href={`/dashboard/election/${election.id}`}
-                              className="inline-flex items-center text-blue-500 hover:underline cursor-pointer"
-                              onClick={(e) => {
-                                if (!election.id) {
-                                  e.preventDefault();
-                                  toast.error('Invalid election ID');
-                                }
-                              }}
-                            >
-                              View <ExternalLink className="ml-2 h-4 w-4" />
-                            </a>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button
-                onClick={fetchElections}
-                variant="outline"
-                className="w-full"
-                disabled={refreshingElections || !account}
-              >
-                {refreshingElections ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing...</>
-                ) : (
-                  "Refresh Elections"
-                )}
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="create">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create New Election</CardTitle>
-              <CardDescription>
-                Set up a new election with a unique name
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="election-name">Election Name</Label>
-                  <Input
-                    id="election-name"
-                    placeholder="Enter election name"
-                    value={newElectionName}
-                    onChange={(e) => setNewElectionName(e.target.value)}
-                    disabled={txLoading['createElection'] || !account}
-                  />
-                </div>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            {account ? (
+              <div className="flex items-center">
+                <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+                <p className="text-sm">
+                  Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}
+                </p>
               </div>
-            </CardContent>
-            <CardFooter>
-              <Button
-                onClick={createElection}
-                className="w-full"
-                disabled={txLoading['createElection'] || !account || !newElectionName.trim()}
-              >
-                {txLoading['createElection'] ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
+            ) : (
+              <div className="flex items-center">
+                <div className="w-2 h-2 rounded-full bg-gray-300 mr-2"></div>
+                <p className="text-sm text-gray-500">Not connected</p>
+              </div>
+            )}
+          </div>
+          <Button
+            onClick={connectWallet}
+            variant={account ? "outline" : "default"}
+            disabled={txLoading['connectWallet']}
+          >
+            {txLoading['connectWallet'] ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
+            ) : account ? (
+              "Connected"
+            ) : (
+              "Connect Wallet"
+            )}
+          </Button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg mb-6 flex items-start">
+            <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg mb-6 flex items-start">
+            <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+            <p>{success}</p>
+          </div>
+        )}
+
+        <Tabs defaultValue="home" className="w-full">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
+            <TabsTrigger value="home">Home</TabsTrigger>
+            <TabsTrigger value="elections">Elections</TabsTrigger>
+            <TabsTrigger value="create">Create</TabsTrigger>
+            <TabsTrigger value="sbt">SBT</TabsTrigger>
+            {admin?.toLowerCase() === account?.toLowerCase() && (
+              <TabsTrigger value="admin">Admin</TabsTrigger>
+            )}
+          </TabsList>
+
+          <TabsContent value="elections">
+            <Card>
+              <CardHeader>
+                <CardTitle>All Elections</CardTitle>
+                <CardDescription>
+                  View all available elections and their details
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="text-center py-8 flex flex-col items-center">
+                    <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                    <p>Loading elections...</p>
+                  </div>
+                ) : elections.length === 0 ? (
+                  <div className="text-center py-8 border rounded-md p-4 bg-gray-50">
+                    <p>No elections found. Create one!</p>
+                  </div>
                 ) : (
-                  "Create Election"
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Candidates</TableHead>
+                          <TableHead>Votes</TableHead>
+                          <TableHead>Start Time</TableHead>
+                          <TableHead>End Time</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {elections.map((election) => (
+                          <TableRow key={election.id}>
+                            <TableCell>{election.id}</TableCell>
+                            <TableCell>{election.name}</TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 text-xs rounded-full ${election.isCompleted
+                                ? 'bg-gray-100 text-gray-700'
+                                : election.isActive
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                {getElectionStatus(election)}
+                              </span>
+                            </TableCell>
+                            <TableCell>{election.candidateCount}</TableCell>
+                            <TableCell>{election.voterCount}</TableCell>
+                            <TableCell>{formatTime(election.startTime)}</TableCell>
+                            <TableCell>{formatTime(election.endTime)}</TableCell>
+                            <TableCell className="text-right">
+                              <a
+                                href={`/dashboard/election/${election.id}`}
+                                className="inline-flex items-center text-blue-500 hover:text-blue-700"
+                                onClick={(e) => {
+                                  if (!election.id) {
+                                    e.preventDefault();
+                                    toast.error('Invalid election ID');
+                                  }
+                                }}
+                              >
+                                View <ExternalLink className="ml-2 h-4 w-4" />
+                              </a>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="sbt">
-          <Card>
-            <CardHeader>
-              <CardTitle>SBT Token Application</CardTitle>
-              <CardDescription>
-                Apply for a Soul Bound Token (SBT) to participate in voting
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!account ? (
-                <div className="text-center py-4 border rounded-md p-4 bg-gray-50">
-                  Please connect your wallet to apply for an SBT token.
-                </div>
-              ) : sbtLoading ? (
-                <div className="text-center py-4 flex flex-col items-center">
-                  <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                  <p>Loading your SBT status...</p>
-                </div>
-              ) : userApplication?.isRegistered ? (
-                <div className="p-4 rounded text-center bg-gray-50 border border-gray-200 text-gray-800">
-                  <p className="font-medium">Your application has been approved! You can now participate in voting.</p>
-                </div>
-              ) : userApplication?.hasApplied ? (
-                <div className="p-4 rounded text-center bg-gray-50 border border-gray-200 text-gray-800">
-                  <p className="font-medium">Your application is being reviewed. Please check back later.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="full-name">Full Name</Label>
-                    <Input
-                      id="full-name"
-                      placeholder="Enter your full name"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      disabled={txLoading['applySBT']}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Enter your email address"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={txLoading['applySBT']}
-                    />
-                  </div>
-
-                  <div className="bg-gray-50 border border-gray-200 text-gray-800 p-3 rounded">
-                    <p className="text-sm">
-                      <strong>Note:</strong> This information is used only to generate a unique voter hash.
-                      Your email is not stored on the blockchain.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            {!userApplication?.hasApplied && account && (
+              </CardContent>
               <CardFooter>
                 <Button
-                  onClick={applySBT}
+                  onClick={fetchElections}
+                  variant="outline"
                   className="w-full"
-                  disabled={txLoading['applySBT'] || !account || !fullName.trim() || !email.trim()}
+                  disabled={refreshingElections || !account}
                 >
-                  {txLoading['applySBT'] ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</>
+                  {refreshingElections ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing...</>
                   ) : (
-                    "Apply for SBT Token"
+                    "Refresh Elections"
                   )}
                 </Button>
               </CardFooter>
-            )}
-          </Card>
-        </TabsContent>
+            </Card>
+          </TabsContent>
 
-        {admin?.toLowerCase() === account?.toLowerCase() && (
-          <TabsContent value="admin">
-            <Card className="shadow-sm">
-              <CardHeader className="border-b">
-                <CardTitle>Admin Dashboard</CardTitle>
+          <TabsContent value="create">
+            <Card>
+              <CardHeader>
+                <CardTitle>Create New Election</CardTitle>
                 <CardDescription>
-                  Manage pending applications and elections
+                  Set up a new election with a unique name
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-5">
+              <CardContent>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <div className="flex justify-between items-center mb-2">
-                      <Label htmlFor="pending-applications">Pending Applications</Label>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={getAllPendingApplications}
-                        disabled={txLoading['getPendingApps']}
-                      >
-                        {txLoading['getPendingApps'] ? (
-                          <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Refreshing...</>
-                        ) : (
-                          "Refresh"
-                        )}
-                      </Button>
-                    </div>
-                    <ScrollArea className="h-48 rounded-md border">
-                      {applications.length > 0 ? (
-                        <div className="p-2 space-y-2">
-                          {applications.map((application) => (
-                            <div key={application} className="p-3 rounded bg-gray-50 border flex justify-between items-center">
-                              <p className="text-sm font-medium truncate">{application}</p>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => approveApplication(application)}
-                                disabled={txLoading[`approve_${application}`]}
-                              >
-                                {txLoading[`approve_${application}`] ? (
-                                  <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Approving...</>
-                                ) : (
-                                  "Approve"
-                                )}
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-4 text-gray-500">No pending applications found.</div>
-                      )}
-                    </ScrollArea>
+                    <Label htmlFor="election-name">Election Name</Label>
+                    <Input
+                      id="election-name"
+                      placeholder="Enter election name"
+                      value={newElectionName}
+                      onChange={(e) => setNewElectionName(e.target.value)}
+                      disabled={txLoading['createElection'] || !account}
+                    />
                   </div>
                 </div>
               </CardContent>
+              <CardFooter>
+                <Button
+                  onClick={createElection}
+                  className="w-full"
+                  disabled={txLoading['createElection'] || !account || !newElectionName.trim()}
+                >
+                  {txLoading['createElection'] ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
+                  ) : (
+                    "Create Election"
+                  )}
+                </Button>
+              </CardFooter>
             </Card>
           </TabsContent>
-        )}
-      </Tabs>
+
+          <TabsContent value="sbt">
+            <Card>
+              <CardHeader>
+                <CardTitle>SBT Token Application</CardTitle>
+                <CardDescription>
+                  Apply for a Soul Bound Token (SBT) to participate in voting
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!account ? (
+                  <div className="text-center py-4 border rounded-md p-4 bg-gray-50">
+                    Please connect your wallet to apply for an SBT token.
+                  </div>
+                ) : sbtLoading ? (
+                  <div className="text-center py-4 flex flex-col items-center">
+                    <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                    <p>Loading your SBT status...</p>
+                  </div>
+                ) : userApplication?.isRegistered ? (
+                  <div className="p-4 rounded text-center bg-green-50 border border-green-200 text-green-700">
+                    <p className="font-medium">Your application has been approved! You can now participate in voting.</p>
+                  </div>
+                ) : userApplication?.hasApplied ? (
+                  <div className="p-4 rounded text-center bg-yellow-50 border border-yellow-200 text-yellow-700">
+                    <p className="font-medium">Your application is being reviewed. Please check back later.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="full-name">Full Name</Label>
+                      <Input
+                        id="full-name"
+                        placeholder="Enter your full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        disabled={txLoading['applySBT']}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email Address</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="Enter your email address"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        disabled={txLoading['applySBT']}
+                      />
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded">
+                      <p className="text-sm">
+                        <strong>Note:</strong> This information is used only to generate a unique voter hash.
+                        Your email is not stored on the blockchain.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+              {!userApplication?.hasApplied && account && (
+                <CardFooter>
+                  <Button
+                    onClick={applySBT}
+                    className="w-full"
+                    disabled={txLoading['applySBT'] || !account || !fullName.trim() || !email.trim()}
+                  >
+                    {txLoading['applySBT'] ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</>
+                    ) : (
+                      "Apply for SBT Token"
+                    )}
+                  </Button>
+                </CardFooter>
+              )}
+            </Card>
+          </TabsContent>
+          {admin?.toLowerCase() === account?.toLowerCase() && (
+            <TabsContent value="admin">
+              <Card className="shadow-sm">
+                <CardHeader className="border-b">
+                  <CardTitle>Admin Dashboard</CardTitle>
+                  <CardDescription>
+                    Manage pending applications and elections
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center mb-2">
+                        <Label htmlFor="pending-applications">Pending Applications</Label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={getAllPendingApplications}
+                          disabled={txLoading['getPendingApps']}
+                        >
+                          {txLoading['getPendingApps'] ? (
+                            <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Refreshing...</>
+                          ) : (
+                            "Refresh"
+                          )}
+                        </Button>
+                      </div>
+                      <ScrollArea className="h-48 rounded-md border">
+                        {applications.length > 0 ? (
+                          <div className="p-2 space-y-2">
+                            {applications.map((application) => (
+                              <div key={application} className="p-3 rounded bg-gray-50 border flex justify-between items-center">
+                                <p className="text-sm font-medium truncate">{application}</p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => approveApplication(application)}
+                                  disabled={txLoading[`approve_${application}`]}
+                                >
+                                  {txLoading[`approve_${application}`] ? (
+                                    <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Approving...</>
+                                  ) : (
+                                    "Approve"
+                                  )}
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-gray-500">No pending applications found.</div>
+                        )}
+                      </ScrollArea>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
+      </div>
     </div>
   );
-
-  // return (
-  //   <div className="container mx-auto py-8 px-4">
-  //     <h1 className="text-3xl font-bold mb-6 text-center">ZK Voting System</h1>
-
-  //     {/* Wallet Connection Status */}
-  //     <div className="flex justify-between items-center mb-6">
-  //       <div>
-  //         {account ? (
-  //           <div className="flex items-center">
-  //             <div className="w-2 h-2 rounded-full bg-gray-800 mr-2"></div>
-  //             <p className="text-sm">
-  //               Connected: {account.substring(0, 6)}...{account.substring(account.length - 4)}
-  //             </p>
-  //           </div>
-  //         ) : (
-  //           <div className="flex items-center">
-  //             <div className="w-2 h-2 rounded-full bg-gray-300 mr-2"></div>
-  //             <p className="text-sm text-gray-500">Not connected</p>
-  //           </div>
-  //         )}
-  //       </div>
-  //       <Button
-  //         onClick={connectWallet}
-  //         variant={account ? "outline" : "default"}
-  //         disabled={txLoading['connectWallet']}
-  //       >
-  //         {txLoading['connectWallet'] ? (
-  //           <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Connecting...</>
-  //         ) : account ? (
-  //           "Connected"
-  //         ) : (
-  //           "Connect Wallet"
-  //         )}
-  //       </Button>
-  //     </div>
-
-  //     {/* Error and Success Messages */}
-  //     {error && (
-  //       <div className="bg-gray-50 border border-gray-200 text-gray-800 p-3 rounded mb-4 flex items-start">
-  //         <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0 text-gray-800" />
-  //         <p>{error}</p>
-  //       </div>
-  //     )}
-
-  //     {success && (
-  //       <div className="bg-gray-50 border border-gray-200 text-gray-800 p-3 rounded mb-4 flex items-start">
-  //         <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0 text-gray-800" />
-  //         <p>{success}</p>
-  //       </div>
-  //     )}
-
-  //     {/* Main Content */}
-  //     <Tabs defaultValue="elections" className="w-full">
-  //       <TabsList className="grid w-full grid-cols-3 mb-6">
-  //         <TabsTrigger value="elections">Elections List</TabsTrigger>
-  //         <TabsTrigger value="create">Create Election</TabsTrigger>
-  //         <TabsTrigger value="sbt">SBT Application</TabsTrigger>
-  //       </TabsList>
-
-  //       {/* Elections List Tab */}
-  //       <TabsContent value="elections">
-  //         <Card>
-  //           <CardHeader>
-  //             <CardTitle>All Elections</CardTitle>
-  //             <CardDescription>
-  //               View all available elections and their details
-  //             </CardDescription>
-  //           </CardHeader>
-  //           <CardContent>
-  //             {loading ? (
-  //               <div className="text-center py-8 flex flex-col items-center">
-  //                 <Loader2 className="h-6 w-6 animate-spin mb-2" />
-  //                 <p>Loading elections...</p>
-  //               </div>
-  //             ) : elections.length === 0 ? (
-  //               <div className="text-center py-8 border rounded-md p-4 bg-gray-50">
-  //                 <p>No elections found. Create one!</p>
-  //               </div>
-  //             ) : (
-  //               <ScrollArea className="h-96">
-  //                 <div className="space-y-4">
-  //                   {elections.map((election) => (
-  //                     <Card key={election.id} className="border-gray-200">
-  //                       <CardHeader className="pb-2">
-  //                         <div className="flex justify-between items-center">
-  //                           <CardTitle className="text-lg">{election.name}</CardTitle>
-  //                           <span className={`px-2 py-1 text-xs rounded-full ${
-  //                             election.isCompleted
-  //                               ? 'bg-gray-100 text-gray-700'
-  //                               : election.isActive
-  //                                 ? 'bg-gray-800 text-white'
-  //                                 : 'bg-gray-200 text-gray-800'
-  //                           }`}>
-  //                             {getElectionStatus(election)}
-  //                           </span>
-
-  //                         </div>
-  //                         <CardDescription>
-  //                           ID: {election.id} | Candidates: {election.candidateCount} | Votes: {election.voterCount}
-  //                         </CardDescription>
-  //                       </CardHeader>
-  //                       <CardContent className="pb-2 pt-0">
-  //                         <div className="text-sm space-y-1">
-  //                           <p>Admin: {election.admin.substring(0, 6)}...{election.admin.substring(election.admin.length - 4)}</p>
-  //                           <p>Start: {formatTime(election.startTime)}</p>
-  //                           <p>End: {formatTime(election.endTime)}</p>
-  //                         </div>
-  //                       </CardContent>
-  //                     </Card>
-  //                   ))}
-  //                 </div>
-  //               </ScrollArea>
-  //             )}
-  //           </CardContent>
-  //           <CardFooter>
-  //             <Button
-  //               onClick={fetchElections}
-  //               variant="outline"
-  //               className="w-full"
-  //               disabled={refreshingElections || !account}
-  //             >
-  //               {refreshingElections ? (
-  //                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing...</>
-  //               ) : (
-  //                 "Refresh Elections"
-  //               )}
-  //             </Button>
-  //           </CardFooter>
-  //         </Card>
-  //       </TabsContent>
-
-  //       {/* Create Election Tab */}
-  //       <TabsContent value="create">
-  //         <Card>
-  //           <CardHeader>
-  //             <CardTitle>Create New Election</CardTitle>
-  //             <CardDescription>
-  //               Set up a new election with a unique name
-  //             </CardDescription>
-  //           </CardHeader>
-  //           <CardContent>
-  //             <div className="space-y-4">
-  //               <div className="space-y-2">
-  //                 <Label htmlFor="election-name">Election Name</Label>
-  //                 <Input
-  //                   id="election-name"
-  //                   placeholder="Enter election name"
-  //                   value={newElectionName}
-  //                   onChange={(e) => setNewElectionName(e.target.value)}
-  //                   disabled={txLoading['createElection'] || !account}
-  //                 />
-  //               </div>
-  //             </div>
-  //           </CardContent>
-  //           <CardFooter>
-  //             <Button
-  //               onClick={createElection}
-  //               className="w-full"
-  //               disabled={txLoading['createElection'] || !account || !newElectionName.trim()}
-  //             >
-  //               {txLoading['createElection'] ? (
-  //                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...</>
-  //               ) : (
-  //                 "Create Election"
-  //               )}
-  //             </Button>
-  //           </CardFooter>
-  //         </Card>
-  //       </TabsContent>
-
-  //       {/* SBT Application Tab */}
-  //       <TabsContent value="sbt">
-  //         <Card>
-  //           <CardHeader>
-  //             <CardTitle>SBT Token Application</CardTitle>
-  //             <CardDescription>
-  //               Apply for a Soul Bound Token (SBT) to participate in voting
-  //             </CardDescription>
-  //           </CardHeader>
-  //           <CardContent>
-  //             {!account ? (
-  //               <div className="text-center py-4 border rounded-md p-4 bg-gray-50">
-  //                 Please connect your wallet to apply for an SBT token.
-  //               </div>
-  //             ) : sbtLoading ? (
-  //               <div className="text-center py-4 flex flex-col items-center">
-  //                 <Loader2 className="h-6 w-6 animate-spin mb-2" />
-  //                 <p>Loading your SBT status...</p>
-  //               </div>
-  //             ) : userApplication?.isRegistered ? (
-  //               <div className="p-4 rounded text-center bg-gray-50 border border-gray-200 text-gray-800">
-  //                 <p className="font-medium">Your application has been approved! You can now participate in voting.</p>
-  //               </div>
-  //             ) : userApplication?.hasApplied ? (
-  //               <div className="p-4 rounded text-center bg-gray-50 border border-gray-200 text-gray-800">
-  //                 <p className="font-medium">Your application is being reviewed. Please check back later.</p>
-  //               </div>
-  //             ) : (
-  //               <div className="space-y-4">
-  //                 <div className="space-y-2">
-  //                   <Label htmlFor="full-name">Full Name</Label>
-  //                   <Input
-  //                     id="full-name"
-  //                     placeholder="Enter your full name"
-  //                     value={fullName}
-  //                     onChange={(e) => setFullName(e.target.value)}
-  //                     disabled={txLoading['applySBT']}
-  //                   />
-  //                 </div>
-
-  //                 <div className="space-y-2">
-  //                   <Label htmlFor="email">Email Address</Label>
-  //                   <Input
-  //                     id="email"
-  //                     type="email"
-  //                     placeholder="Enter your email address"
-  //                     value={email}
-  //                     onChange={(e) => setEmail(e.target.value)}
-  //                     disabled={txLoading['applySBT']}
-  //                   />
-  //                 </div>
-
-  //                 <div className="bg-gray-50 border border-gray-200 text-gray-800 p-3 rounded">
-  //                   <p className="text-sm">
-  //                     <strong>Note:</strong> This information is used only to generate a unique voter hash.
-  //                     Your email is not stored on the blockchain.
-  //                   </p>
-  //                 </div>
-  //               </div>
-  //             )}
-  //           </CardContent>
-  //           {!userApplication?.hasApplied && account && (
-  //             <CardFooter>
-  //               <Button
-  //                 onClick={applySBT}
-  //                 className="w-full"
-  //                 disabled={txLoading['applySBT'] || !account || !fullName.trim() || !email.trim()}
-  //               >
-  //                 {txLoading['applySBT'] ? (
-  //                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</>
-  //                 ) : (
-  //                   "Apply for SBT Token"
-  //                 )}
-  //               </Button>
-  //             </CardFooter>
-  //           )}
-  //         </Card>
-  //       </TabsContent>
-  //     </Tabs>
-
-  //     {/* Admin Panel - Shown conditionally */}
-  //     {admin?.toLowerCase() === account?.toLowerCase() && (
-  //       <div className="mt-8">
-  //         <Card className="shadow-sm">
-  //           <CardHeader className="border-b">
-  //             <CardTitle>Admin Dashboard</CardTitle>
-  //             <CardDescription>
-  //               Manage pending applications and elections
-  //             </CardDescription>
-  //           </CardHeader>
-  //           <CardContent className="p-5">
-  //             <div className="space-y-4">
-  //               <div className="space-y-2">
-  //                 <div className="flex justify-between items-center mb-2">
-  //                   <Label htmlFor="pending-applications">Pending Applications</Label>
-  //                   <Button 
-  //                     variant="outline" 
-  //                     size="sm"
-  //                     onClick={getAllPendingApplications}
-  //                     disabled={txLoading['getPendingApps']}
-  //                   >
-  //                     {txLoading['getPendingApps'] ? (
-  //                       <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Refreshing...</>
-  //                     ) : (
-  //                       "Refresh"
-  //                     )}
-  //                   </Button>
-  //                 </div>
-  //                 <ScrollArea className="h-48 rounded-md border">
-  //                   {applications.length > 0 ? (
-  //                     <div className="p-2 space-y-2">
-  //                       {applications.map((application) => (
-  //                         <div key={application} className="p-3 rounded bg-gray-50 border flex justify-between items-center">
-  //                           <p className="text-sm font-medium truncate">{application}</p>
-  //                           <Button
-  //                             variant="outline"
-  //                             size="sm"
-  //                             onClick={() => approveApplication(application)}
-  //                             disabled={txLoading[`approve_${application}`]}
-  //                           >
-  //                             {txLoading[`approve_${application}`] ? (
-  //                               <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Approving...</>
-  //                             ) : (
-  //                               "Approve"
-  //                             )}
-  //                           </Button>
-  //                         </div>
-  //                       ))}
-  //                     </div>
-  //                   ) : (
-  //                     <div className="text-center py-4 text-gray-500">No pending applications found.</div>
-  //                   )}
-  //                 </ScrollArea>
-  //               </div>
-  //             </div>
-  //           </CardContent>
-  //         </Card>
-  //       </div>
-  //     )}
-  //   </div>
-  // );
 };
 
 export default VotingPage;
